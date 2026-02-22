@@ -226,9 +226,9 @@ class TestCliRemove:
         assert result.exit_code == 0
         assert "Removed" in result.output
         mock_close.assert_called_once_with("web")
-        # Verify symlink cleanup call
-        cleanup_cmd = mock_ssh.call_args_list[-1][0][1]
-        assert "rm -f /tmp/resume/resume-web.sock" in cleanup_cmd
+        # kill-session should be the only ssh_run call
+        assert mock_ssh.call_count == 1
+        assert "tmux kill-session -t resume-web" in mock_ssh.call_args_list[0][0][1]
 
     def test_error_not_found(self, with_host):
         mock_result = MagicMock(returncode=1)
@@ -250,7 +250,7 @@ class TestOpenTerminalAgentForwarding:
             open_terminal_window("user@host", "web")
         script = mock_run.call_args[0][0][2]  # osascript -e <script>
         assert "ssh -t -A user@host" in script
-        assert "ln -sf $SSH_AUTH_SOCK /tmp/resume/resume-web.sock" in script
+        assert "ln -sf $SSH_AUTH_SOCK /tmp/resume/agent.sock" in script
         assert "tmux set-environment" in script
 
     def test_no_agent_flag_when_disabled(self, with_host):

@@ -127,7 +127,6 @@ def ssh_kill_session(host, name):
     if result.returncode != 0:
         print(f"[red]Session '{name}' not found on remote.[/red]")
         raise typer.Exit(1)
-    ssh_run(host, f"rm -f /tmp/resume/{full}.sock")
 
 
 def open_terminal_window(host, name):
@@ -135,8 +134,9 @@ def open_terminal_window(host, name):
     agent_fwd = load_config().get("ssh_agent_forwarding")
     agent_flag = " -A" if agent_fwd else ""
     if agent_fwd:
-        # Per-session symlink so multiple connections don't clobber each other
-        sock = f"/tmp/resume/{full}.sock"
+        # Single shared symlink — every new connection refreshes it so all
+        # sessions automatically get a working agent socket.
+        sock = "/tmp/resume/agent.sock"
         setup = (
             f'mkdir -p /tmp/resume && '
             f'ln -sf $SSH_AUTH_SOCK {sock} && '
