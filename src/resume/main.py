@@ -145,17 +145,32 @@ def open_terminal_window(host, name):
 def close_resume_terminal_windows():
     applescript = """
 tell application "Terminal"
-    set winsToClose to {}
-    repeat with w in windows
-        repeat with t in tabs of w
-            if custom title of t starts with "resume-" then
-                copy w to end of winsToClose
-                exit repeat
-            end if
-        end repeat
+    -- Send exit to each resume tab so running processes end cleanly
+    repeat with i from (count windows) to 1 by -1
+        try
+            set w to window i
+            repeat with t in tabs of w
+                if custom title of t starts with "resume-" then
+                    do script "exit" in t
+                    exit repeat
+                end if
+            end repeat
+        end try
     end repeat
-    repeat with w in winsToClose
-        close w saving no
+
+    delay 0.5
+
+    -- Close any remaining resume windows
+    repeat with i from (count windows) to 1 by -1
+        try
+            set w to window i
+            repeat with t in tabs of w
+                if custom title of t starts with "resume-" then
+                    close w saving no
+                    exit repeat
+                end if
+            end repeat
+        end try
     end repeat
 end tell
 """
