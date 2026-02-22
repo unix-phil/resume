@@ -135,8 +135,8 @@ def open_terminal_window(host, name):
     escaped = shell_cmd.replace("\\", "\\\\").replace('"', '\\"')
     applescript = (
         f'tell application "Terminal"\n'
-        f'    set t to do script "{escaped}"\n'
-        f'    set custom title of t to "{full}"\n'
+        f'    do script "{escaped}"\n'
+        f'    set custom title of selected tab of front window to "{full}"\n'
         f'end tell'
     )
     subprocess.run(["osascript", "-e", applescript], check=True)
