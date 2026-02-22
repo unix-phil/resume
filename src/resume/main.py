@@ -180,11 +180,11 @@ end tell
 @app.command(epilog="Pass a NAME or an option, not both. Run ./resume --test to run the test suite.")
 def main(
     name: Optional[str] = typer.Argument(None, help="Session name to create/attach"),
-    setup: bool = typer.Option(False, "--setup", help="Configure SSH host"),
-    list_sessions: bool = typer.Option(False, "--list", help="List active sessions"),
-    remove: Optional[str] = typer.Option(None, "--remove", help="Remove a session"),
-    detach: bool = typer.Option(False, "--detach", help="Detach all sessions and close resume windows"),
-    clear: bool = typer.Option(False, "--clear", help="Kill all sessions and close resume windows"),
+    setup: bool = typer.Option(False, "--setup", "-s", help="Configure SSH host"),
+    list_sessions: bool = typer.Option(False, "--list", "-l", help="List active sessions"),
+    remove: Optional[str] = typer.Option(None, "--remove", "-r", help="Remove a session"),
+    detach: bool = typer.Option(False, "--detach", "-d", help="Detach all sessions and close resume windows"),
+    clear: bool = typer.Option(False, "--clear", "-c", help="Kill all sessions and close resume windows"),
 ):
     flags = sum([setup, list_sessions, remove is not None, detach, clear])
     if name and flags:
@@ -225,7 +225,7 @@ def main(
         attached = [s for s, a in sessions if a]
         if attached:
             for s in attached:
-                ssh_run(host, f"tmux detach-client -t {PREFIX}{s}")
+                ssh_run(host, f"tmux detach-client -s {PREFIX}{s}")
             print(f"[yellow]Detached {len(attached)} session(s):[/yellow] {', '.join(attached)}")
         else:
             print("[yellow]No attached sessions.[/yellow]")
