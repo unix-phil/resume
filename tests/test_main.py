@@ -160,14 +160,38 @@ class TestSshCreateSession:
 
 class TestCliSetup:
     def test_saves_host(self):
-        result = runner.invoke(app, ["--setup"], input="me@box\n")
+        result = runner.invoke(app, ["--setup"], input="me@box\n\n")
         assert result.exit_code == 0
         assert "Saved" in result.output
         assert load_config()["ssh_host"] == "me@box"
 
+    def test_enables_agent_forwarding(self):
+        result = runner.invoke(app, ["--setup"], input="me@box\ny\n")
+        assert result.exit_code == 0
+        assert load_config()["ssh_agent_forwarding"] is True
+        assert "enabled" in result.output
+
+    def test_disables_agent_forwarding(self):
+        save_config({"ssh_host": "old@host", "ssh_agent_forwarding": True})
+        result = runner.invoke(app, ["--setup"], input="\nn\n")
+        assert result.exit_code == 0
+        assert load_config()["ssh_agent_forwarding"] is False
+        assert "disabled" in result.output
+
+    def test_keeps_existing_agent_forwarding_on_empty_input(self):
+        save_config({"ssh_host": "old@host", "ssh_agent_forwarding": True})
+        result = runner.invoke(app, ["--setup"], input="\n\n")
+        assert result.exit_code == 0
+        assert load_config()["ssh_agent_forwarding"] is True
+
+    def test_defaults_to_disabled(self):
+        result = runner.invoke(app, ["--setup"], input="me@box\n\n")
+        assert result.exit_code == 0
+        assert load_config()["ssh_agent_forwarding"] is False
+
     def test_keeps_existing_host_on_empty_input(self):
         save_config({"ssh_host": "old@host"})
-        result = runner.invoke(app, ["--setup"], input="\n")
+        result = runner.invoke(app, ["--setup"], input="\n\n")
         assert result.exit_code == 0
         assert load_config()["ssh_host"] == "old@host"
 
@@ -211,6 +235,23 @@ class TestCliRemove:
     def test_rejects_invalid_name(self, with_host):
         result = runner.invoke(app, ["--remove", "bad name"])
         assert result.exit_code != 0
+
+
+class TestOpenTerminalAgentForwarding:
+    def test_includes_agent_flag(self, with_host):
+        save_config({"ssh_host": "user@host", "ssh_agent_forwarding": True})
+        with patch("resume.main.subprocess.run") as mock_run:
+            from resume.main import open_terminal_window
+            open_terminal_window("user@host", "web")
+        script = mock_run.call_args[0][0][2]  # osascript -e <script>
+        assert "ssh -t -A user@host" in script
+
+    def test_no_agent_flag_when_disabled(self, with_host):
+        with patch("resume.main.subprocess.run") as mock_run:
+            from resume.main import open_terminal_window
+            open_terminal_window("user@host", "web")
+        script = mock_run.call_args[0][0][2]
+        assert "ssh -t user@host" in script
 
 
 class TestCliName:

@@ -131,7 +131,8 @@ def ssh_kill_session(host, name):
 
 def open_terminal_window(host, name):
     full = PREFIX + name
-    shell_cmd = f"""ssh -t {host} '$SHELL -lc "tmux attach -t {full}"'"""
+    agent_flag = " -A" if load_config().get("ssh_agent_forwarding") else ""
+    shell_cmd = f"""ssh -t{agent_flag} {host} '$SHELL -lc "tmux attach -t {full}"'"""
     escaped = shell_cmd.replace("\\", "\\\\").replace('"', '\\"')
     applescript = (
         f'tell application "Terminal"\n'
@@ -205,8 +206,22 @@ def main(
             print("[red]No host provided.[/red]")
             raise typer.Exit(1)
         config["ssh_host"] = host
+
+        current_agent = config.get("ssh_agent_forwarding", False)
+        default = "Y/n" if current_agent else "y/N"
+        agent_input = input(f"Enable SSH agent forwarding (-A)? [{default}]: ").strip().lower()
+        if agent_input in ("y", "yes"):
+            agent_fwd = True
+        elif agent_input in ("n", "no"):
+            agent_fwd = False
+        else:
+            agent_fwd = current_agent
+        config["ssh_agent_forwarding"] = agent_fwd
+
         save_config(config)
         print(f"[green]Saved SSH host:[/green] {host}")
+        status = "enabled" if agent_fwd else "disabled"
+        print(f"[green]SSH agent forwarding:[/green] {status}")
 
     elif list_sessions:
         host = require_host()
