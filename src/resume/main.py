@@ -127,12 +127,24 @@ def ssh_kill_session(host, name):
     if result.returncode != 0:
         print(f"[red]Session '{name}' not found on remote.[/red]")
         raise typer.Exit(1)
+    ssh_run(host, f"rm -f /tmp/resume/{full}.sock")
 
 
 def open_terminal_window(host, name):
     full = PREFIX + name
-    agent_flag = " -A" if load_config().get("ssh_agent_forwarding") else ""
-    shell_cmd = f"""ssh -t{agent_flag} {host} '$SHELL -lc "tmux attach -t {full}"'"""
+    agent_fwd = load_config().get("ssh_agent_forwarding")
+    agent_flag = " -A" if agent_fwd else ""
+    if agent_fwd:
+        # Per-session symlink so multiple connections don't clobber each other
+        sock = f"/tmp/resume/{full}.sock"
+        setup = (
+            f'mkdir -p /tmp/resume && '
+            f'ln -sf $SSH_AUTH_SOCK {sock} && '
+            f'tmux set-environment -t {full} SSH_AUTH_SOCK {sock} && '
+        )
+    else:
+        setup = ""
+    shell_cmd = f"""ssh -t{agent_flag} {host} '$SHELL -lc "{setup}tmux attach -t {full}"'"""
     escaped = shell_cmd.replace("\\", "\\\\").replace('"', '\\"')
     applescript = (
         f'tell application "Terminal"\n'
@@ -143,15 +155,23 @@ def open_terminal_window(host, name):
     subprocess.run(["osascript", "-e", applescript], check=True)
 
 
-def close_resume_terminal_windows():
-    applescript = """
+def close_terminal_windows(name=None):
+    """Close Terminal windows for resume sessions.
+
+    If name is given, close only that session's window (exact match).
+    Otherwise close all resume-* windows (prefix match).
+    """
+    if name:
+        condition = f'custom title of t is "{PREFIX}{name}"'
+    else:
+        condition = f'custom title of t starts with "{PREFIX}"'
+    applescript = f"""
 tell application "Terminal"
-    -- Send exit to each resume tab so running processes end cleanly
     repeat with i from (count windows) to 1 by -1
         try
             set w to window i
             repeat with t in tabs of w
-                if custom title of t starts with "resume-" then
+                if {condition} then
                     do script "exit" in t
                     exit repeat
                 end if
@@ -161,12 +181,11 @@ tell application "Terminal"
 
     delay 0.5
 
-    -- Close any remaining resume windows
     repeat with i from (count windows) to 1 by -1
         try
             set w to window i
             repeat with t in tabs of w
-                if custom title of t starts with "resume-" then
+                if {condition} then
                     close w saving no
                     exit repeat
                 end if
@@ -244,7 +263,7 @@ def main(
             print(f"[yellow]Detached {len(attached)} session(s):[/yellow] {', '.join(attached)}")
         else:
             print("[yellow]No attached sessions.[/yellow]")
-        close_resume_terminal_windows()
+        close_terminal_windows()
 
     elif clear:
         host = require_host()
@@ -253,15 +272,17 @@ def main(
             names = [s for s, _ in sessions]
             for s in names:
                 ssh_run(host, f"tmux kill-session -t {PREFIX}{s}")
+            ssh_run(host, "rm -rf /tmp/resume")
             print(f"[red]Killed {len(names)} session(s):[/red] {', '.join(names)}")
         else:
             print("[yellow]No sessions.[/yellow]")
-        close_resume_terminal_windows()
+        close_terminal_windows()
 
     elif remove:
         host = require_host()
         validate_session_name(remove)
         ssh_kill_session(host, remove)
+        close_terminal_windows(remove)
         print(f"[red]Removed session:[/red] {remove}")
 
     elif name:

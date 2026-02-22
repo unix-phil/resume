@@ -220,10 +220,15 @@ class TestCliList:
 class TestCliRemove:
     def test_kills_session(self, with_host):
         mock_result = MagicMock(returncode=0)
-        with patch("resume.main.ssh_run", return_value=mock_result):
+        with patch("resume.main.ssh_run", return_value=mock_result) as mock_ssh, \
+             patch("resume.main.close_terminal_windows") as mock_close:
             result = runner.invoke(app, ["--remove", "web"])
         assert result.exit_code == 0
         assert "Removed" in result.output
+        mock_close.assert_called_once_with("web")
+        # Verify symlink cleanup call
+        cleanup_cmd = mock_ssh.call_args_list[-1][0][1]
+        assert "rm -f /tmp/resume/resume-web.sock" in cleanup_cmd
 
     def test_error_not_found(self, with_host):
         mock_result = MagicMock(returncode=1)
@@ -238,13 +243,15 @@ class TestCliRemove:
 
 
 class TestOpenTerminalAgentForwarding:
-    def test_includes_agent_flag(self, with_host):
+    def test_includes_agent_flag_and_symlink(self, with_host):
         save_config({"ssh_host": "user@host", "ssh_agent_forwarding": True})
         with patch("resume.main.subprocess.run") as mock_run:
             from resume.main import open_terminal_window
             open_terminal_window("user@host", "web")
         script = mock_run.call_args[0][0][2]  # osascript -e <script>
         assert "ssh -t -A user@host" in script
+        assert "ln -sf $SSH_AUTH_SOCK /tmp/resume/resume-web.sock" in script
+        assert "tmux set-environment" in script
 
     def test_no_agent_flag_when_disabled(self, with_host):
         with patch("resume.main.subprocess.run") as mock_run:
@@ -252,6 +259,7 @@ class TestOpenTerminalAgentForwarding:
             open_terminal_window("user@host", "web")
         script = mock_run.call_args[0][0][2]
         assert "ssh -t user@host" in script
+        assert "ln -sf" not in script
 
 
 class TestCliName:
@@ -308,16 +316,18 @@ class TestCliClear:
         sessions = [("api", False), ("web", True)]
         with patch("resume.main.list_remote_sessions", return_value=sessions), \
              patch("resume.main.ssh_run") as mock_ssh, \
-             patch("resume.main.close_resume_terminal_windows") as mock_close:
+             patch("resume.main.close_terminal_windows") as mock_close:
             result = runner.invoke(app, ["--clear"])
         assert result.exit_code == 0
         assert "Killed 2" in result.output
-        assert mock_ssh.call_count == 2
+        assert mock_ssh.call_count == 3  # 2 kill-session + 1 rm cleanup
+        cleanup_cmd = mock_ssh.call_args_list[-1][0][1]
+        assert "rm -rf /tmp/resume" in cleanup_cmd
         mock_close.assert_called_once()
 
     def test_empty_case(self, with_host):
         with patch("resume.main.list_remote_sessions", return_value=[]), \
-             patch("resume.main.close_resume_terminal_windows") as mock_close:
+             patch("resume.main.close_terminal_windows") as mock_close:
             result = runner.invoke(app, ["--clear"])
         assert result.exit_code == 0
         assert "No sessions" in result.output
@@ -329,7 +339,7 @@ class TestCliDetach:
         sessions = [("api", True), ("web", False), ("bg", True)]
         with patch("resume.main.list_remote_sessions", return_value=sessions), \
              patch("resume.main.ssh_run") as mock_ssh, \
-             patch("resume.main.close_resume_terminal_windows") as mock_close:
+             patch("resume.main.close_terminal_windows") as mock_close:
             result = runner.invoke(app, ["--detach"])
         assert result.exit_code == 0
         assert "Detached 2" in result.output
@@ -341,7 +351,7 @@ class TestCliDetach:
     def test_no_attached_sessions(self, with_host):
         sessions = [("web", False)]
         with patch("resume.main.list_remote_sessions", return_value=sessions), \
-             patch("resume.main.close_resume_terminal_windows") as mock_close:
+             patch("resume.main.close_terminal_windows") as mock_close:
             result = runner.invoke(app, ["--detach"])
         assert result.exit_code == 0
         assert "No attached sessions" in result.output
@@ -349,7 +359,7 @@ class TestCliDetach:
 
     def test_empty_sessions(self, with_host):
         with patch("resume.main.list_remote_sessions", return_value=[]), \
-             patch("resume.main.close_resume_terminal_windows") as mock_close:
+             patch("resume.main.close_terminal_windows") as mock_close:
             result = runner.invoke(app, ["--detach"])
         assert result.exit_code == 0
         assert "No attached sessions" in result.output
