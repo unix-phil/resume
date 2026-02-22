@@ -139,6 +139,17 @@ class TestSshCreateSession:
         color_cmd = mock.call_args_list[2][0][1]
         assert "set" in color_cmd
 
+    def test_creates_new_session_with_agent_forwarding(self, with_host):
+        save_config({"ssh_host": "user@host", "ssh_agent_forwarding": True})
+        mock_list = MagicMock(stdout="")
+        mock_create = MagicMock(returncode=0)
+        mock_color = MagicMock(returncode=0)
+        with patch("resume.main.ssh_run", side_effect=[mock_list, mock_create, mock_color]) as mock:
+            existed, attached = ssh_create_session("h", "web")
+        assert (existed, attached) == (False, False)
+        create_cmd = mock.call_args_list[1][0][1]
+        assert "-e SSH_AUTH_SOCK=/tmp/resume/agent.sock" in create_cmd
+
     def test_existing_detached_session(self):
         mock_list = MagicMock(stdout=f"{PREFIX}web:0\n")
         with patch("resume.main.ssh_run", return_value=mock_list) as mock:
@@ -251,6 +262,7 @@ class TestOpenTerminalAgentForwarding:
         script = mock_run.call_args[0][0][2]  # osascript -e <script>
         assert "ssh -t -A user@host" in script
         assert "ln -sf $SSH_AUTH_SOCK /tmp/resume/agent.sock" in script
+        assert "export SSH_AUTH_SOCK=/tmp/resume/agent.sock" in script
         assert "tmux set-environment" in script
 
     def test_no_agent_flag_when_disabled(self, with_host):

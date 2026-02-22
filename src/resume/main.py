@@ -112,7 +112,9 @@ def ssh_create_session(host, name):
             attached = line.split(":")[-1] != "0"
             break
     if not existed:
-        ssh_run(host, f"tmux new-session -d -s {full}", check=True)
+        agent_fwd = load_config().get("ssh_agent_forwarding")
+        env_opt = " -e SSH_AUTH_SOCK=/tmp/resume/agent.sock" if agent_fwd else ""
+        ssh_run(host, f"tmux new-session -d -s {full}{env_opt}", check=True)
         color = SESSION_COLORS[hash(name) % len(SESSION_COLORS)]
         ssh_run(host, f"tmux set -t {full} status-style 'bg={color},fg=black'")
     return existed, attached
@@ -140,6 +142,7 @@ def open_terminal_window(host, name):
         setup = (
             f'mkdir -p /tmp/resume && '
             f'ln -sf $SSH_AUTH_SOCK {sock} && '
+            f'export SSH_AUTH_SOCK={sock} && '
             f'tmux set-environment -t {full} SSH_AUTH_SOCK {sock} && '
         )
     else:
