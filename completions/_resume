@@ -1,0 +1,12 @@
+#compdef resume
+
+_resume() {
+    local -a sessions
+    local line
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && sessions+=("$line")
+    done < <(resume --list 2>/dev/null | sed -n 's/^  \([^ ]*\)  .*/\1/p')
+    (( ${#sessions} )) && _describe 'session' sessions
+}
+
+_resume "$@"

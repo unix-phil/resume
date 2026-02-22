@@ -13,9 +13,10 @@ A macOS CLI for managing tmux sessions on a remote VM. Each session opens in its
 ```bash
 git clone <repo-url>
 cd resume
+./install.sh
 ```
 
-No other setup needed — the first run installs [uv](https://github.com/astral-sh/uv) and Python dependencies automatically.
+`install.sh` symlinks `resume` into `/usr/local/bin` so you can run it from anywhere. The first run installs [uv](https://github.com/astral-sh/uv) and Python dependencies automatically.
 
 ## Setup
 
